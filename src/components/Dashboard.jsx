@@ -67,7 +67,11 @@ export default function Dashboard({
           <div className="space-y-3">
             {resumoPorGrupo.map((grupo) => {
               const perc = Math.min(parseFloat(grupo.percConsumo), 100)
-              const corBarra = perc >= 90 ? '#ef4444' : perc >= 70 ? '#f59e0b' : '#22c55e'
+              // Usa a cor do primeiro cartão do grupo que tem gastos,
+              // ou do primeiro cartão do grupo mesmo sem gastos
+              const cartaoPrincipal = grupo.cartoes.find((c) => c.faturaAtual > 0) || grupo.cartoes[0]
+              const corGrupo = cartaoPrincipal?.cor || grupo.cor || '#3b82f6'
+              const corBarra = perc >= 90 ? '#ef4444' : perc >= 70 ? '#f59e0b' : corGrupo
 
               return (
                 <div key={grupo.id} className="bg-slate-800 rounded-xl p-4 border border-slate-700">
