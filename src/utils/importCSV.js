@@ -107,6 +107,11 @@ function parseBBTxt(texto) {
 
     lancamentos.push({
       data: dataBase,
+      // Para à-vista: guarda o mês da fatura como referência
+      // Para parceladas: calcParcelas já cuida disso via data base
+      mesReferencia: totalParcelas === 1
+        ? `${anoFatura}-${String(mesFatura).padStart(2, '0')}`
+        : undefined,
       descricao,
       valor: valorTotal,
       categoria: detectarCategoria(descricao),

@@ -42,8 +42,12 @@ export function mesLabel(chave) {
 export function calcTotalFaturaAtual(lancamentos, mesAtual) {
   return lancamentos
     .filter((l) => {
-      if (l.parcelas <= 1) return mesChave(new Date(l.data)) === mesAtual
-      // Parcela que cai no mês atual
+      // À vista: usa mesReferencia se existir (importado do BB), senão usa data
+      if (!l.parcelas || l.parcelas <= 1) {
+        const mesRef = l.mesReferencia || mesChave(new Date(l.data))
+        return mesRef === mesAtual
+      }
+      // Parcelado: verifica se alguma parcela cai no mês atual
       const dataBase = new Date(l.data)
       for (let i = 0; i < l.parcelas; i++) {
         const d = new Date(dataBase.getFullYear(), dataBase.getMonth() + i, 1)
@@ -52,7 +56,7 @@ export function calcTotalFaturaAtual(lancamentos, mesAtual) {
       return false
     })
     .reduce((acc, l) => {
-      if (l.parcelas <= 1) return acc + l.valor
+      if (!l.parcelas || l.parcelas <= 1) return acc + l.valor
       return acc + l.valor / l.parcelas
     }, 0)
 }
