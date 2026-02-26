@@ -168,10 +168,21 @@ export function useCartao() {
     }
   })
 
-  const totalLimite = cartoes.reduce((a, c) => a + c.limite, 0)
+  // Cartões fora de qualquer grupo — usa limite individual de cada um
+  const cartoesSemGrupo = cartoes.filter((c) => !c.grupoId)
+  const limiteSemGrupo = cartoesSemGrupo.reduce((a, c) => a + c.limite, 0)
+
+  // Grupos — conta o limite compartilhado UMA VEZ por grupo, não por cartão
+  const limiteComGrupo = grupos.reduce((a, g) => a + g.limiteCompartilhado, 0)
+
+  const totalLimite = limiteSemGrupo + limiteComGrupo
+
+  // Fatura e parcelas: soma de todos os cartões normalmente (cada gasto é real)
   const totalFaturaAtual = resumoPorCartao.reduce((a, c) => a + c.faturaAtual, 0)
   const totalParcelasFuturas = resumoPorCartao.reduce((a, c) => a + c.parcelasFuturas, 0)
-  const totalDisponivelReal = resumoPorCartao.reduce((a, c) => a + c.disponivelReal, 0)
+
+  // Disponível real: limite total correto menos o que foi consumido
+  const totalDisponivelReal = totalLimite - totalFaturaAtual - totalParcelasFuturas
 
   const lancamentosImpulsivos = lancamentos.filter((l) => l.impulsivo)
   const totalImpulsivo = lancamentosImpulsivos.reduce((a, l) => a + l.valor, 0)
