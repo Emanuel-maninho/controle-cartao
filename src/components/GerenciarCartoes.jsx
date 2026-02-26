@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { PlusCircle, Trash2, Pencil, Check, X, Link2, Unlink } from 'lucide-react'
+import { PlusCircle, Trash2, Pencil, Check, X, Link2 } from 'lucide-react'
 
 const CORES_OPCOES = ['#3b82f6', '#8b5cf6', '#f97316', '#10b981', '#ef4444', '#f59e0b', '#06b6d4', '#ec4899']
 
@@ -10,21 +10,47 @@ export default function GerenciarCartoes({
   const [form, setForm] = useState({ nome: '', limite: '', cor: '#3b82f6', grupoId: '' })
   const [editandoId, setEditandoId] = useState(null)
   const [editForm, setEditForm] = useState({})
-  const [formGrupo, setFormGrupo] = useState({ nome: '', limiteCompartilhado: '', cor: '#eab308' })
-  const [abaAtiva, setAbaAtiva] = useState('cartoes') // cartoes | grupos
+  const [formGrupo, setFormGrupo] = useState({ nome: '', limiteCompartilhado: '', cor: '#eab308', cartoesSelecionados: [] })
+  const [abaAtiva, setAbaAtiva] = useState('cartoes')
 
   function handleSubmitCartao(e) {
     e.preventDefault()
-    if (!form.nome || !form.limite) return
+    if (!form.nome.trim() || !form.limite) return
     adicionarCartao(form)
     setForm({ nome: '', limite: '', cor: '#3b82f6', grupoId: '' })
   }
 
   function handleSubmitGrupo(e) {
     e.preventDefault()
-    if (!formGrupo.nome || !formGrupo.limiteCompartilhado) return
-    adicionarGrupo(formGrupo)
-    setFormGrupo({ nome: '', limiteCompartilhado: '', cor: '#eab308' })
+    const limite = parseFloat(formGrupo.limiteCompartilhado)
+    if (!formGrupo.nome.trim() || isNaN(limite) || limite <= 0) return
+
+    // Cria o grupo e já vincula os cartões selecionados
+    const novoId = adicionarGrupo({ nome: formGrupo.nome, limiteCompartilhado: limite, cor: formGrupo.cor })
+
+    // Vincula os cartões selecionados ao grupo
+    formGrupo.cartoesSelecionados.forEach((cartaoId) => {
+      const cartao = cartoes.find((c) => c.id === cartaoId)
+      if (cartao) {
+        editarCartao(cartaoId, {
+          nome: cartao.nome,
+          limite: cartao.limite,
+          cor: cartao.cor,
+          grupoId: novoId,
+        })
+      }
+    })
+
+    setFormGrupo({ nome: '', limiteCompartilhado: '', cor: '#eab308', cartoesSelecionados: [] })
+  }
+
+  function toggleCartaoGrupo(cartaoId) {
+    setFormGrupo((prev) => ({
+      ...prev,
+      cartoesSelecionados: prev.cartoesSelecionados.includes(cartaoId)
+        ? prev.cartoesSelecionados.filter((id) => id !== cartaoId)
+        : [...prev.cartoesSelecionados, cartaoId],
+    }))
   }
 
   function iniciarEdicao(cartao) {
@@ -64,10 +90,8 @@ export default function GerenciarCartoes({
       {/* ── ABA CARTÕES ── */}
       {abaAtiva === 'cartoes' && (
         <>
-          {/* Formulário novo cartão */}
           <form onSubmit={handleSubmitCartao} className="bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-3">
             <p className="text-sm font-semibold text-slate-300">Adicionar novo cartão</p>
-
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Nome *</label>
@@ -92,7 +116,6 @@ export default function GerenciarCartoes({
               </div>
             </div>
 
-            {/* Vincular a grupo */}
             {grupos.length > 0 && (
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Limite compartilhado (opcional)</label>
@@ -104,35 +127,27 @@ export default function GerenciarCartoes({
                   <option value="">Nenhum (limite individual)</option>
                   {grupos.map((g) => (
                     <option key={g.id} value={g.id}>
-                      {g.nome} — R$ {g.limiteCompartilhado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                      {g.nome} — R$ {Number(g.limiteCompartilhado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </option>
                   ))}
                 </select>
               </div>
             )}
 
-            {/* Seletor de cor */}
             <div>
               <label className="text-xs text-slate-400 mb-2 block">Cor</label>
               <div className="flex gap-2">
                 {CORES_OPCOES.map((cor) => (
-                  <button
-                    key={cor}
-                    type="button"
-                    onClick={() => setForm((p) => ({ ...p, cor }))}
+                  <button key={cor} type="button" onClick={() => setForm((p) => ({ ...p, cor }))}
                     className={`w-7 h-7 rounded-full transition-transform ${form.cor === cor ? 'scale-125 ring-2 ring-white' : ''}`}
-                    style={{ backgroundColor: cor }}
-                  />
+                    style={{ backgroundColor: cor }} />
                 ))}
               </div>
             </div>
 
-            <button
-              type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
-            >
-              <PlusCircle size={16} />
-              Adicionar Cartão
+            <button type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm">
+              <PlusCircle size={16} /> Adicionar Cartão
             </button>
           </form>
 
@@ -141,7 +156,6 @@ export default function GerenciarCartoes({
             <div className="px-4 py-3 border-b border-slate-700">
               <p className="text-xs text-slate-400 uppercase tracking-wider">Seus cartões</p>
             </div>
-
             {cartoes.length === 0 ? (
               <p className="text-slate-500 text-sm p-4">Nenhum cartão cadastrado.</p>
             ) : (
@@ -152,24 +166,17 @@ export default function GerenciarCartoes({
                     {editandoId === cartao.id ? (
                       <div className="space-y-2">
                         <div className="grid grid-cols-2 gap-2">
-                          <input
-                            value={editForm.nome}
+                          <input value={editForm.nome}
                             onChange={(e) => setEditForm((p) => ({ ...p, nome: e.target.value }))}
-                            className="bg-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                          <input
-                            type="number"
-                            value={editForm.limite}
+                            className="bg-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" />
+                          <input type="number" value={editForm.limite}
                             onChange={(e) => setEditForm((p) => ({ ...p, limite: e.target.value }))}
-                            className="bg-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                          />
+                            className="bg-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500" />
                         </div>
                         {grupos.length > 0 && (
-                          <select
-                            value={editForm.grupoId}
+                          <select value={editForm.grupoId}
                             onChange={(e) => setEditForm((p) => ({ ...p, grupoId: e.target.value }))}
-                            className="w-full bg-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500"
-                          >
+                            className="w-full bg-slate-700 rounded-lg px-3 py-1.5 text-white text-sm outline-none focus:ring-2 focus:ring-blue-500">
                             <option value="">Nenhum (limite individual)</option>
                             {grupos.map((g) => (
                               <option key={g.id} value={g.id}>{g.nome}</option>
@@ -178,26 +185,18 @@ export default function GerenciarCartoes({
                         )}
                         <div className="flex gap-2">
                           {CORES_OPCOES.map((cor) => (
-                            <button
-                              key={cor}
-                              type="button"
-                              onClick={() => setEditForm((p) => ({ ...p, cor }))}
+                            <button key={cor} type="button" onClick={() => setEditForm((p) => ({ ...p, cor }))}
                               className={`w-6 h-6 rounded-full transition-transform ${editForm.cor === cor ? 'scale-125 ring-2 ring-white' : ''}`}
-                              style={{ backgroundColor: cor }}
-                            />
+                              style={{ backgroundColor: cor }} />
                           ))}
                         </div>
                         <div className="flex gap-2">
-                          <button
-                            onClick={() => salvarEdicao(cartao.id)}
-                            className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-                          >
+                          <button onClick={() => salvarEdicao(cartao.id)}
+                            className="flex items-center gap-1 bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
                             <Check size={13} /> Salvar
                           </button>
-                          <button
-                            onClick={() => setEditandoId(null)}
-                            className="flex items-center gap-1 bg-slate-600 hover:bg-slate-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors"
-                          >
+                          <button onClick={() => setEditandoId(null)}
+                            className="flex items-center gap-1 bg-slate-600 hover:bg-slate-500 text-white text-xs px-3 py-1.5 rounded-lg transition-colors">
                             <X size={13} /> Cancelar
                           </button>
                         </div>
@@ -216,7 +215,7 @@ export default function GerenciarCartoes({
                               )}
                             </div>
                             <p className="text-xs text-slate-400">
-                              Limite: R$ {cartao.limite.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              Limite: R$ {Number(cartao.limite).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               {grupo && <span className="text-yellow-500/70"> · compartilhado</span>}
                             </p>
                           </div>
@@ -243,12 +242,12 @@ export default function GerenciarCartoes({
       {abaAtiva === 'grupos' && (
         <>
           <div className="bg-yellow-900/20 border border-yellow-700/40 rounded-xl p-3 text-sm text-yellow-300">
-            🔗 <strong>Limite compartilhado</strong> permite que dois ou mais cartões dividam um mesmo limite total. Ideal para os cartões do BB que somam R$ 35.000 juntos.
+            🔗 <strong>Limite compartilhado</strong> — dois cartões dividem um mesmo limite total. Ideal para os dois cartões BB que somam R$ 35.000.
           </div>
 
-          {/* Formulário novo grupo */}
           <form onSubmit={handleSubmitGrupo} className="bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-3">
             <p className="text-sm font-semibold text-slate-300">Criar grupo de limite</p>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-slate-400 mb-1 block">Nome do grupo *</label>
@@ -263,7 +262,7 @@ export default function GerenciarCartoes({
                 <label className="text-xs text-slate-400 mb-1 block">Limite total (R$) *</label>
                 <input
                   type="number"
-                  min="0"
+                  min="1"
                   step="0.01"
                   value={formGrupo.limiteCompartilhado}
                   onChange={(e) => setFormGrupo((p) => ({ ...p, limiteCompartilhado: e.target.value }))}
@@ -272,6 +271,43 @@ export default function GerenciarCartoes({
                 />
               </div>
             </div>
+
+            {/* Selecionar cartões que fazem parte do grupo */}
+            <div>
+              <label className="text-xs text-slate-400 mb-2 block">Selecione os cartões do grupo *</label>
+              {cartoes.length === 0 ? (
+                <p className="text-xs text-slate-500">Nenhum cartão cadastrado ainda.</p>
+              ) : (
+                <div className="space-y-2">
+                  {cartoes.map((cartao) => {
+                    const selecionado = formGrupo.cartoesSelecionados.includes(cartao.id)
+                    return (
+                      <div
+                        key={cartao.id}
+                        onClick={() => toggleCartaoGrupo(cartao.id)}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors ${
+                          selecionado ? 'bg-yellow-500/20 border border-yellow-500/40' : 'bg-slate-700 border border-transparent hover:border-slate-500'
+                        }`}
+                      >
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: cartao.cor }} />
+                        <p className="text-sm text-white flex-1">{cartao.nome}</p>
+                        <p className="text-xs text-slate-400">R$ {Number(cartao.limite).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                          selecionado ? 'bg-yellow-500 border-yellow-500' : 'border-slate-500'
+                        }`}>
+                          {selecionado && (
+                            <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
             <button
               type="submit"
               className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-semibold py-2 rounded-lg flex items-center justify-center gap-2 transition-colors text-sm"
@@ -293,14 +329,13 @@ export default function GerenciarCartoes({
                 const cartoesDoGrupo = cartoes.filter((c) => c.grupoId === grupo.id)
                 return (
                   <div key={grupo.id} className="px-4 py-3 border-b border-slate-700/50 last:border-0">
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center justify-between mb-2">
                       <div>
                         <p className="text-sm font-semibold text-white flex items-center gap-2">
-                          <Link2 size={14} className="text-yellow-400" />
-                          {grupo.nome}
+                          <Link2 size={14} className="text-yellow-400" /> {grupo.nome}
                         </p>
                         <p className="text-xs text-slate-400">
-                          Limite total: R$ {grupo.limiteCompartilhado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          Limite total: R$ {Number(grupo.limiteCompartilhado).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </p>
                       </div>
                       <button onClick={() => removerGrupo(grupo.id)} className="text-slate-400 hover:text-red-400 transition-colors">
@@ -308,15 +343,17 @@ export default function GerenciarCartoes({
                       </button>
                     </div>
                     {cartoesDoGrupo.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 mt-2">
+                      <div className="flex flex-wrap gap-1">
                         {cartoesDoGrupo.map((c) => (
-                          <span key={c.id} className="text-xs px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: c.cor + '33', border: `1px solid ${c.cor}` }}>
+                          <span key={c.id} className="text-xs px-2 py-0.5 rounded-full text-white flex items-center gap-1"
+                            style={{ backgroundColor: c.cor + '33', border: `1px solid ${c.cor}` }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: c.cor }} />
                             {c.nome}
                           </span>
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-500 mt-1">Nenhum cartão vinculado ainda. Edite um cartão e vincule a este grupo.</p>
+                      <p className="text-xs text-slate-500">Nenhum cartão vinculado.</p>
                     )}
                   </div>
                 )

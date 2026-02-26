@@ -94,18 +94,24 @@ function parseBBTxt(texto) {
       .replace(/\s+/g, ' ')
       .trim()
 
-    // Detecta parcelas no nome (ex: "COMPRA 02/06")
+    // Detecta parcelas no nome (ex: "PARC 01/03")
+    // O valor no extrato BB já é o valor da parcela, não o total
     const matchParcela = descricao.match(/(\d{2})\/(\d{2})/)
+    const parcelaAtual = matchParcela ? parseInt(matchParcela[1]) : 1
     const totalParcelas = matchParcela ? parseInt(matchParcela[2]) : 1
 
+    // Recalcula o valor total da compra multiplicando pelo número de parcelas
+    const valorTotal = totalParcelas > 1 ? parseFloat((valor * totalParcelas).toFixed(2)) : valor
+
     lancamentos.push({
-      data: parseData(dataStr, ano, 'ddmm'),
+      data,
       descricao,
-      valor,
+      valor: valorTotal,
       categoria: detectarCategoria(descricao),
       parcelas: totalParcelas,
       impulsivo: false,
       origem: 'bb-txt',
+      _parcelaAtual: parcelaAtual,
     })
   }
 
