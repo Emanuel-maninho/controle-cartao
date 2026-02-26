@@ -52,7 +52,6 @@ function detectarCategoria(descricao) {
 function parseBBTxt(texto) {
   const linhas = texto.split('\n')
 
-  // Extrai mês e ano da fatura no cabeçalho (ex: "25/02/2026")
   let anoFatura = new Date().getFullYear()
   let mesFatura = new Date().getMonth() + 1
   for (const linha of linhas) {
@@ -67,6 +66,10 @@ function parseBBTxt(texto) {
   const lancamentos = []
   const regexLinha = /^(\d{2}\/\d{2})\s{2,}(.+?)\s{2,}([\d.,]+)\s+([\d.,]+)\s*$/
 
+  // Palavras que indicam cobranças recorrentes mensais
+  // Nesses casos o valor já é o mensal — NÃO multiplica pelo total de parcelas
+  const recorrentesRegex = /anuidade|seguro|seguros|mensalidade|assinatura|anuais|manutencao/i
+
   for (const linha of linhas) {
     const match = linha.match(regexLinha)
     if (!match) continue
@@ -77,48 +80,63 @@ function parseBBTxt(texto) {
 
     const valor = parseMoeda(valorStr)
     if (valor <= 0) continue
-    if (/pgto|pagamento|saldo fatura|doacao|arredt/i.test(descRaw)) continue
+
+    // Ignora pagamentos, arredondamentos e doações de centavos
+    if (/pgto|pagamento|saldo fatura|doacao|arredt|arredondamento/i.test(descRaw)) continue
 
     const descricao = descRaw
       .replace(/\s{2,}[A-Z\s]+$/, '')
       .replace(/\s+/g, ' ')
       .trim()
 
-    const [diaStr, ] = dataStr.split('/')
-    const dia = diaStr.padStart(2, '0')
-
-    // ── Detecta parcelas (ex: "PARC 04/21") ──────────────────
+    // Detecta parcelas (ex: "PARC 04/21" ou "TIT-PARC 07/12")
     const matchParcela = descricao.match(/(\d{2})\/(\d{2})/)
     const parcelaAtual  = matchParcela ? parseInt(matchParcela[1]) : 1
     const totalParcelas = matchParcela ? parseInt(matchParcela[2]) : 1
-    const valorTotal    = totalParcelas > 1
-      ? parseFloat((valor * totalParcelas).toFixed(2))
-      : valor
 
-    // ── Calcula a data real da compra ─────────────────────────
-    // Âncora: parcela ATUAL cai no mês da fatura
-    // Então parcela 1 caiu (parcelaAtual - 1) meses ANTES da fatura
-    // Ex: PARC 10/10 na fatura fev/2026 → parcela 1 = mai/2025
-    const mesesAntesDoInicio = parcelaAtual - 1
-    const dataInicio = new Date(anoFatura, mesFatura - 1 - mesesAntesDoInicio, 1)
-    const anoCompra = dataInicio.getFullYear()
-    const mesCompra = String(dataInicio.getMonth() + 1).padStart(2, '0')
-    const dataBase  = `${anoCompra}-${mesCompra}-${dia}`
+    // Verifica se é cobrança recorrente (anuidade, seguro, etc.)
+    // Nesse caso o valor do extrato já é o valor da parcela mensal
+    // e NÃO representa um parcelamento real de compra
+    const ehRecorrente = recorrentesRegex.test(descricao)
+
+    let valorTotal
+    let parcelasReais
+
+    if (ehRecorrente || totalParcelas <= 1) {
+      // Cobrança à vista ou recorrente mensal — usa o valor direto
+      valorTotal  = valor
+      parcelasReais = 1
+    } else {
+      // Compra parcelada real — multiplica para achar o total
+      valorTotal  = parseFloat((valor * totalParcelas).toFixed(2))
+      parcelasReais = totalParcelas
+    }
+
+    // Calcula a data real de início da compra
+    // A parcela ATUAL cai no mês da fatura
+    // Então parcela 1 foi (parcelaAtual - 1) meses antes
+    const mesesAntes = parcelasReais > 1 ? (parcelaAtual - 1) : 0
+    const dataInicio = new Date(anoFatura, mesFatura - 1 - mesesAntes, 1)
+    const anoCompra  = dataInicio.getFullYear()
+    const mesCompra  = String(dataInicio.getMonth() + 1).padStart(2, '0')
+    const [diaStr]   = dataStr.split('/')
+    const dataBase   = `${anoCompra}-${mesCompra}-${diaStr.padStart(2, '0')}`
+
+    // Para à-vista e recorrentes: usa mesReferencia = mês da fatura
+    const mesReferencia = parcelasReais <= 1
+      ? `${anoFatura}-${String(mesFatura).padStart(2, '0')}`
+      : undefined
 
     lancamentos.push({
       data: dataBase,
-      // Para à-vista: guarda o mês da fatura como referência
-      // Para parceladas: calcParcelas já cuida disso via data base
-      mesReferencia: totalParcelas === 1
-        ? `${anoFatura}-${String(mesFatura).padStart(2, '0')}`
-        : undefined,
+      mesReferencia,
       descricao,
       valor: valorTotal,
       categoria: detectarCategoria(descricao),
-      parcelas: totalParcelas,
+      parcelas: parcelasReais,
       impulsivo: false,
       origem: 'bb-txt',
-      _parcelaAtual: parcelaAtual,
+      _parcelaAtual: parcelasReais > 1 ? parcelaAtual : 1,
     })
   }
 
