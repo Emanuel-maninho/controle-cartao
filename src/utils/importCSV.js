@@ -6,10 +6,9 @@ function detectarBanco(texto) {
   const linha = t.split('\n')[0]
   if (linha.includes('date') && linha.includes('title') && linha.includes('amount')) return 'nubank'
   if (linha.includes('lançamento') && linha.includes('valor')) return 'inter'
-  return 'nubank' // fallback
+  return 'nubank'
 }
 
-// Limpa valor monetário pra número
 function parseMoeda(str) {
   if (!str) return 0
   const s = str.toString().trim()
@@ -19,13 +18,11 @@ function parseMoeda(str) {
   return parseFloat(s) || 0
 }
 
-// Converte data pra formato YYYY-MM-DD
 function parseData(str, ano, formato = 'dmy') {
   if (!str) return new Date().toISOString().slice(0, 10)
   const s = str.trim()
   if (formato === 'ymd') return s.slice(0, 10)
   if (formato === 'ddmm') {
-    // Apenas DD/MM — usa ano extraído do arquivo
     const [d, m] = s.split('/')
     if (!d || !m) return new Date().toISOString().slice(0, 10)
     return `${ano}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
@@ -35,7 +32,6 @@ function parseData(str, ano, formato = 'dmy') {
   return `${a.slice(0, 4)}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`
 }
 
-// Detecta categoria automaticamente pela descrição
 function detectarCategoria(descricao) {
   const d = descricao.toLowerCase()
   if (/ifood|rappi|uber\s*eat|delivery|pizz|burguer|lanche|restaurante|mcdonalds|subway/i.test(d)) return 'Delivery'
@@ -56,7 +52,7 @@ function detectarCategoria(descricao) {
 function parseBBTxt(texto) {
   const linhas = texto.split('\n')
 
-  // Extrai o ano da linha de data do cabeçalho (ex: "25/02/2026")
+  // Extrai o ano do cabeçalho (ex: "25/02/2026")
   let ano = new Date().getFullYear().toString()
   for (const linha of linhas) {
     const matchAno = linha.match(/\d{2}\/\d{2}\/(\d{4})/)
@@ -67,44 +63,40 @@ function parseBBTxt(texto) {
   }
 
   const lancamentos = []
-
-  // Regex que identifica uma linha de transação:
-  // começa com DD/MM seguido de espaços e descrição e valor
-  // Ex: "29/01    CACAU SHOW             SERRA           BR       60,95        0,00"
   const regexLinha = /^(\d{2}\/\d{2})\s{2,}(.+?)\s{2,}([\d.,]+)\s+([\d.,]+)\s*$/
 
   for (const linha of linhas) {
     const match = linha.match(regexLinha)
     if (!match) continue
 
-    const dataStr  = match[1].trim()                   // DD/MM
-    const descRaw  = match[2].trim()                   // Descrição + cidade
-    const valorStr = match[3].trim()                   // Valor R$
+    const dataStr  = match[1].trim()
+    const descRaw  = match[2].trim()
+    const valorStr = match[3].trim()
 
     const valor = parseMoeda(valorStr)
 
-    // Ignora valores zero, negativos (pagamentos) e linhas de saldo
     if (valor <= 0) continue
     if (/pgto|pagamento|saldo fatura|doacao|arredt/i.test(descRaw)) continue
 
-    // Limpa a descrição removendo cidade (últimas palavras em maiúsculas)
-    // Ex: "CACAU SHOW             SERRA" → "CACAU SHOW"
     const descricao = descRaw
-      .replace(/\s{2,}[A-Z\s]+$/, '')  // remove cidade no final
+      .replace(/\s{2,}[A-Z\s]+$/, '')
       .replace(/\s+/g, ' ')
       .trim()
 
-    // Detecta parcelas no nome (ex: "PARC 01/03")
-    // O valor no extrato BB já é o valor da parcela, não o total
+    // Detecta parcelas (ex: "PARC 01/03")
+    // O valor no extrato BB já é o valor da parcela — multiplica pra achar o total
     const matchParcela = descricao.match(/(\d{2})\/(\d{2})/)
-    const parcelaAtual = matchParcela ? parseInt(matchParcela[1]) : 1
+    const parcelaAtual  = matchParcela ? parseInt(matchParcela[1]) : 1
     const totalParcelas = matchParcela ? parseInt(matchParcela[2]) : 1
+    const valorTotal    = totalParcelas > 1
+      ? parseFloat((valor * totalParcelas).toFixed(2))
+      : valor
 
-    // Recalcula o valor total da compra multiplicando pelo número de parcelas
-    const valorTotal = totalParcelas > 1 ? parseFloat((valor * totalParcelas).toFixed(2)) : valor
+    // ✅ CORREÇÃO: era "data" (undefined), agora chama parseData corretamente
+    const dataFormatada = parseData(dataStr, ano, 'ddmm')
 
     lancamentos.push({
-      data,
+      data: dataFormatada,
       descricao,
       valor: valorTotal,
       categoria: detectarCategoria(descricao),
@@ -124,22 +116,23 @@ function parseOFX(texto) {
   const transacoes = texto.match(/<STMTTRN>[\s\S]*?<\/STMTTRN>/g) || []
 
   for (const bloco of transacoes) {
-    const tipo    = (bloco.match(/<TRNTYPE>(.*?)[\r\n<]/) || [])[1]?.trim()
-    const dataRaw = (bloco.match(/<DTPOSTED>(.*?)[\r\n<]/) || [])[1]?.trim()
-    const valorRaw= (bloco.match(/<TRNAMT>(.*?)[\r\n<]/)  || [])[1]?.trim()
-    const desc    = (bloco.match(/<MEMO>(.*?)[\r\n<]/)    || [])[1]?.trim()
-              || (bloco.match(/<NAME>(.*?)[\r\n<]/)    || [])[1]?.trim()
-              || 'Sem descrição'
+    const tipo     = (bloco.match(/<TRNTYPE>(.*?)[\r\n<]/) || [])[1]?.trim()
+    const dataRaw  = (bloco.match(/<DTPOSTED>(.*?)[\r\n<]/) || [])[1]?.trim()
+    const valorRaw = (bloco.match(/<TRNAMT>(.*?)[\r\n<]/)  || [])[1]?.trim()
+    const desc     = (bloco.match(/<MEMO>(.*?)[\r\n<]/)    || [])[1]?.trim()
+               || (bloco.match(/<NAME>(.*?)[\r\n<]/)    || [])[1]?.trim()
+               || 'Sem descrição'
 
     const valor = Math.abs(parseFloat(valorRaw?.replace(',', '.')) || 0)
     if (valor <= 0) continue
-    if (tipo === 'CREDIT') continue // ignora pagamentos
+    if (tipo === 'CREDIT') continue
 
-    // Data OFX: YYYYMMDD
-    const ano = dataRaw?.slice(0, 4) || ''
-    const mes = dataRaw?.slice(4, 6) || ''
-    const dia = dataRaw?.slice(6, 8) || ''
-    const data = ano && mes && dia ? `${ano}-${mes}-${dia}` : new Date().toISOString().slice(0, 10)
+    const anoOFX = dataRaw?.slice(0, 4) || ''
+    const mesOFX = dataRaw?.slice(4, 6) || ''
+    const diaOFX = dataRaw?.slice(6, 8) || ''
+    const data   = anoOFX && mesOFX && diaOFX
+      ? `${anoOFX}-${mesOFX}-${diaOFX}`
+      : new Date().toISOString().slice(0, 10)
 
     lancamentos.push({
       data,
@@ -161,10 +154,10 @@ function parseNubank(texto) {
   return linhas
     .filter((l) => l.trim())
     .map((linha) => {
-      const colunas = linha.split(',')
-      const data = colunas[0]?.trim().slice(0, 10) || ''
+      const colunas   = linha.split(',')
+      const data      = colunas[0]?.trim().slice(0, 10) || ''
       const descricao = colunas[1]?.replace(/"/g, '').trim() || 'Sem descrição'
-      const valor = parseMoeda(colunas[2])
+      const valor     = parseMoeda(colunas[2])
       if (valor <= 0) return null
       return {
         data,
@@ -185,11 +178,11 @@ function parseInter(texto) {
   return linhas
     .filter((l) => l.trim())
     .map((linha) => {
-      const colunas = linha.split(';')
-      const data = parseData(colunas[0], '', 'dmy')
+      const colunas   = linha.split(';')
+      const data      = parseData(colunas[0], '', 'dmy')
       const descricao = colunas[1]?.replace(/"/g, '').trim() || 'Sem descrição'
-      const tipo = colunas[2]?.toLowerCase() || ''
-      const valor = parseMoeda(colunas[3])
+      const tipo      = colunas[2]?.toLowerCase() || ''
+      const valor     = parseMoeda(colunas[3])
       if (valor <= 0 || tipo.includes('pagamento')) return null
       return {
         data,
@@ -210,11 +203,11 @@ export function importarCSV(texto, bancoForcado = null) {
 
   let lancamentos = []
   switch (banco) {
-    case 'bb-txt':   lancamentos = parseBBTxt(texto);  break
-    case 'ofx':      lancamentos = parseOFX(texto);    break
-    case 'nubank':   lancamentos = parseNubank(texto); break
-    case 'inter':    lancamentos = parseInter(texto);  break
-    default:         lancamentos = parseNubank(texto); break
+    case 'bb-txt': lancamentos = parseBBTxt(texto);  break
+    case 'ofx':    lancamentos = parseOFX(texto);    break
+    case 'nubank': lancamentos = parseNubank(texto); break
+    case 'inter':  lancamentos = parseInter(texto);  break
+    default:       lancamentos = parseNubank(texto); break
   }
 
   return { banco, lancamentos }
