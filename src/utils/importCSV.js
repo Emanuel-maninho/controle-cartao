@@ -52,7 +52,7 @@ function detectarCategoria(descricao) {
 function parseBBTxt(texto) {
   const linhas = texto.split('\n')
 
-  // Extrai mês e ano do cabeçalho da fatura (ex: "25/02/2026")
+  // Extrai mês e ano da fatura no cabeçalho (ex: "25/02/2026")
   let anoFatura = new Date().getFullYear()
   let mesFatura = new Date().getMonth() + 1
   for (const linha of linhas) {
@@ -84,12 +84,8 @@ function parseBBTxt(texto) {
       .replace(/\s+/g, ' ')
       .trim()
 
-    // ── Determina o ano correto da transação ──────────────────
-    // Numa fatura de fev/2026: transações em meses > 02 são de 2025 (ano anterior)
-    const [diaStr, mesStr] = dataStr.split('/')
-    const mesTransacao = parseInt(mesStr)
-    const anoTransacao = mesTransacao > mesFatura ? anoFatura - 1 : anoFatura
-    const dataTransacao = `${anoTransacao}-${mesStr.padStart(2, '0')}-${diaStr.padStart(2, '0')}`
+    const [diaStr, ] = dataStr.split('/')
+    const dia = diaStr.padStart(2, '0')
 
     // ── Detecta parcelas (ex: "PARC 04/21") ──────────────────
     const matchParcela = descricao.match(/(\d{2})\/(\d{2})/)
@@ -99,14 +95,15 @@ function parseBBTxt(texto) {
       ? parseFloat((valor * totalParcelas).toFixed(2))
       : valor
 
-    // ── Calcula a data REAL de início da compra ───────────────
-    // "PARC 04/21" na data 2025-11-22 → compra iniciou 3 meses antes → 2025-08-22
-    let dataBase = dataTransacao
-    if (parcelaAtual > 1) {
-      const d = new Date(dataTransacao)
-      d.setMonth(d.getMonth() - (parcelaAtual - 1))
-      dataBase = d.toISOString().slice(0, 10)
-    }
+    // ── Calcula a data real da compra ─────────────────────────
+    // Âncora: parcela ATUAL cai no mês da fatura
+    // Então parcela 1 caiu (parcelaAtual - 1) meses ANTES da fatura
+    // Ex: PARC 10/10 na fatura fev/2026 → parcela 1 = mai/2025
+    const mesesAntesDoInicio = parcelaAtual - 1
+    const dataInicio = new Date(anoFatura, mesFatura - 1 - mesesAntesDoInicio, 1)
+    const anoCompra = dataInicio.getFullYear()
+    const mesCompra = String(dataInicio.getMonth() + 1).padStart(2, '0')
+    const dataBase  = `${anoCompra}-${mesCompra}-${dia}`
 
     lancamentos.push({
       data: dataBase,
