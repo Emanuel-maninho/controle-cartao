@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { LayoutDashboard, PlusCircle, TrendingUp, Flame, List, CreditCard, Upload } from 'lucide-react'
 import { useCartao } from './hooks/useCartao'
 import Dashboard from './components/Dashboard'
 import LancamentoForm from './components/LancamentoForm'
@@ -6,66 +7,139 @@ import ProjecaoMensal from './components/ProjecaoMensal'
 import GastosImpulsivos from './components/GastosImpulsivos'
 import ListaLancamentos from './components/ListaLancamentos'
 import GerenciarCartoes from './components/GerenciarCartoes'
-import { exportCSV } from './utils/exportCSV'
-import { CreditCard, Plus, BarChart2, List, AlertTriangle, Settings, Download } from 'lucide-react'
+import ImportarCSV from './components/ImportarCSV'
 
 const ABAS = [
-  { id: 'dashboard',   label: 'Dashboard',    icon: BarChart2 },
-  { id: 'lancar',      label: 'Lançar',        icon: Plus },
-  { id: 'lancamentos', label: 'Lançamentos',   icon: List },
-  { id: 'projecao',    label: 'Projeção',      icon: CreditCard },
-  { id: 'impulsivos',  label: 'Impulsivos',    icon: AlertTriangle },
-  { id: 'cartoes',     label: 'Cartões',       icon: Settings },
+  { id: 'dashboard',  label: 'Dashboard',   icon: LayoutDashboard },
+  { id: 'lancar',     label: 'Lançar',       icon: PlusCircle      },
+  { id: 'importar',   label: 'Importar CSV', icon: Upload          },
+  { id: 'projecao',   label: 'Projeção',     icon: TrendingUp      },
+  { id: 'impulsivos', label: 'Impulsivos',   icon: Flame           },
+  { id: 'lista',      label: 'Lançamentos',  icon: List            },
+  { id: 'cartoes',    label: 'Cartões',      icon: CreditCard      },
 ]
 
 export default function App() {
-  const [aba, setAba] = useState('dashboard')
-  const cartaoData = useCartao()
+  const [abaAtiva, setAbaAtiva] = useState('dashboard')
+
+  const {
+    lancamentos,
+    cartoes,
+    grupos,
+    mesAtual,
+    adicionarLancamento,
+    removerLancamento,
+    adicionarCartao,
+    removerCartao,
+    editarCartao,
+    adicionarGrupo,
+    removerGrupo,
+    editarGrupo,
+    projecaoMensal,
+    resumoPorCartao,
+    resumoPorGrupo,
+    totalLimite,
+    totalFaturaAtual,
+    totalParcelasFuturas,
+    totalDisponivelReal,
+    totalImpulsivo,
+    percImpulsivo,
+  } = useCartao()
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100">
-      {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CreditCard className="text-blue-400" size={24} />
-          <span className="font-bold text-lg text-white">Controle de Cartão</span>
+    <div className="min-h-screen bg-slate-900 text-white">
+      <div className="max-w-lg mx-auto px-4 pb-32">
+
+        {/* Header */}
+        <div className="pt-8 pb-2">
+          <h1 className="text-2xl font-bold text-white">💳 Controle de Cartões</h1>
+          <p className="text-slate-400 text-sm mt-1">Gerencie seus gastos com inteligência</p>
         </div>
-        <button
-          onClick={() => exportCSV(cartaoData.lancamentos)}
-          className="flex items-center gap-1 text-sm text-slate-400 hover:text-white transition-colors"
-        >
-          <Download size={16} />
-          Export CSV
-        </button>
-      </header>
 
-      {/* Navegação */}
-      <nav className="bg-slate-800 border-b border-slate-700 px-2 flex overflow-x-auto">
-        {ABAS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setAba(id)}
-            className={`flex items-center gap-1.5 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${
-              aba === id
-                ? 'border-blue-400 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            <Icon size={15} />
-            {label}
-          </button>
-        ))}
+        {/* Conteúdo da aba ativa */}
+        {abaAtiva === 'dashboard' && (
+          <Dashboard
+            resumoPorCartao={resumoPorCartao}
+            resumoPorGrupo={resumoPorGrupo}
+            totalLimite={totalLimite}
+            totalFaturaAtual={totalFaturaAtual}
+            totalParcelasFuturas={totalParcelasFuturas}
+            totalDisponivelReal={totalDisponivelReal}
+            totalImpulsivo={totalImpulsivo}
+            percImpulsivo={percImpulsivo}
+          />
+        )}
+
+        {abaAtiva === 'lancar' && (
+          <LancamentoForm
+            cartoes={cartoes}
+            adicionarLancamento={adicionarLancamento}
+            aoSalvar={() => setAbaAtiva('dashboard')}
+          />
+        )}
+
+        {abaAtiva === 'importar' && (
+          <ImportarCSV
+            cartoes={cartoes}
+            adicionarLancamento={adicionarLancamento}
+          />
+        )}
+
+        {abaAtiva === 'projecao' && (
+          <ProjecaoMensal
+            projecaoMensal={projecaoMensal}
+            mesAtual={mesAtual}
+          />
+        )}
+
+        {abaAtiva === 'impulsivos' && (
+          <GastosImpulsivos
+            lancamentos={lancamentos}
+            totalFaturaAtual={totalFaturaAtual}
+            percImpulsivo={percImpulsivo}
+          />
+        )}
+
+        {abaAtiva === 'lista' && (
+          <ListaLancamentos
+            lancamentos={lancamentos}
+            cartoes={cartoes}
+            removerLancamento={removerLancamento}
+          />
+        )}
+
+        {abaAtiva === 'cartoes' && (
+          <GerenciarCartoes
+            cartoes={cartoes}
+            adicionarCartao={adicionarCartao}
+            removerCartao={removerCartao}
+            editarCartao={editarCartao}
+            grupos={grupos}
+            adicionarGrupo={adicionarGrupo}
+            removerGrupo={removerGrupo}
+            editarGrupo={editarGrupo}
+          />
+        )}
+
+      </div>
+
+      {/* Navbar inferior */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-700 z-50">
+        <div className="max-w-lg mx-auto flex justify-around items-center py-2">
+          {ABAS.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setAbaAtiva(id)}
+              className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors ${
+                abaAtiva === id ? 'text-blue-400' : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              <Icon size={20} />
+              <span className="text-[10px]">{label}</span>
+            </button>
+          ))}
+        </div>
       </nav>
-
-      {/* Conteúdo */}
-      <main className="max-w-5xl mx-auto p-4">
-        {aba === 'dashboard'   && <Dashboard   {...cartaoData} />}
-        {aba === 'lancar'      && <LancamentoForm {...cartaoData} aoSalvar={() => setAba('lancamentos')} />}
-        {aba === 'lancamentos' && <ListaLancamentos {...cartaoData} />}
-        {aba === 'projecao'    && <ProjecaoMensal {...cartaoData} />}
-        {aba === 'impulsivos'  && <GastosImpulsivos {...cartaoData} />}
-        {aba === 'cartoes'     && <GerenciarCartoes {...cartaoData} />}
-      </main>
     </div>
   )
 }

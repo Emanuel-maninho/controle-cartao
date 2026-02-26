@@ -3,10 +3,11 @@ import { mesChave, calcProjecaoMensal, calcTotalFaturaAtual, calcTotalParcelasFu
 
 const STORAGE_KEY_LANCAMENTOS = 'controle_cartao_lancamentos'
 const STORAGE_KEY_CARTOES = 'controle_cartao_cartoes'
+const STORAGE_KEY_GRUPOS = 'controle_cartao_grupos'
 
 const CARTOES_INICIAIS = [
-  { id: '1', nome: 'Nubank', limite: 5000, cor: '#8b5cf6' },
-  { id: '2', nome: 'Inter', limite: 3000, cor: '#f97316' },
+  { id: '1', nome: 'Nubank', limite: 5000, cor: '#8b5cf6', grupoId: null },
+  { id: '2', nome: 'Inter', limite: 3000, cor: '#f97316', grupoId: null },
 ]
 
 export function useCartao() {
@@ -24,15 +25,25 @@ export function useCartao() {
     } catch { return CARTOES_INICIAIS }
   })
 
-  // Persiste lançamentos
+  // Grupos de limite compartilhado (ex: BB Cartão 1 + BB Cartão 2)
+  const [grupos, setGrupos] = useState(() => {
+    try {
+      const salvo = localStorage.getItem(STORAGE_KEY_GRUPOS)
+      return salvo ? JSON.parse(salvo) : []
+    } catch { return [] }
+  })
+
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_LANCAMENTOS, JSON.stringify(lancamentos))
   }, [lancamentos])
 
-  // Persiste cartões
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_CARTOES, JSON.stringify(cartoes))
   }, [cartoes])
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_GRUPOS, JSON.stringify(grupos))
+  }, [grupos])
 
   const mesAtual = mesChave(new Date())
 
@@ -63,6 +74,7 @@ export function useCartao() {
       nome: dados.nome,
       limite: parseFloat(dados.limite),
       cor: dados.cor || '#3b82f6',
+      grupoId: dados.grupoId || null,
     }
     setCartoes((prev) => [...prev, novo])
   }
@@ -73,17 +85,56 @@ export function useCartao() {
 
   function editarCartao(id, dados) {
     setCartoes((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, ...dados, limite: parseFloat(dados.limite) } : c))
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, ...dados, limite: parseFloat(dados.limite), grupoId: dados.grupoId || null }
+          : c
+      )
+    )
+  }
+
+  // ---------- Grupos de Limite Compartilhado ----------
+  function adicionarGrupo(dados) {
+    const novo = {
+      id: crypto.randomUUID(),
+      nome: dados.nome,
+      limiteCompartilhado: parseFloat(dados.limiteCompartilhado),
+      cor: dados.cor || '#eab308',
+    }
+    setGrupos((prev) => [...prev, novo])
+    return novo.id
+  }
+
+  function removerGrupo(id) {
+    // Remove o grupo e desvincula os cartões
+    setGrupos((prev) => prev.filter((g) => g.id !== id))
+    setCartoes((prev) =>
+      prev.map((c) => (c.grupoId === id ? { ...c, grupoId: null } : c))
+    )
+  }
+
+  function editarGrupo(id, dados) {
+    setGrupos((prev) =>
+      prev.map((g) =>
+        g.id === id
+          ? { ...g, ...dados, limiteCompartilhado: parseFloat(dados.limiteCompartilhado) }
+          : g
+      )
     )
   }
 
   // ---------- Cálculos ----------
   const projecaoMensal = calcProjecaoMensal(lancamentos)
 
+  // Resumo individual por cartão
   const resumoPorCartao = cartoes.map((cartao) => {
     const lancCartao = lancamentos.filter((l) => l.cartaoId === cartao.id)
     const faturaAtual = calcTotalFaturaAtual(lancCartao, mesAtual)
     const parcelasFuturas = calcTotalParcelasFuturas(lancCartao, mesAtual)
+
+    // Se pertence a um grupo, o disponível real usa o limite do grupo
+    const grupo = grupos.find((g) => g.id === cartao.grupoId)
+    const limiteReferencia = grupo ? grupo.limiteCompartilhado : cartao.limite
     const disponivelReal = cartao.limite - faturaAtual - parcelasFuturas
     const percConsumo = ((faturaAtual / cartao.limite) * 100).toFixed(1)
 
@@ -91,6 +142,27 @@ export function useCartao() {
       ...cartao,
       faturaAtual: parseFloat(faturaAtual.toFixed(2)),
       parcelasFuturas: parseFloat(parcelasFuturas.toFixed(2)),
+      disponivelReal: parseFloat(disponivelReal.toFixed(2)),
+      percConsumo: parseFloat(percConsumo),
+      grupoNome: grupo?.nome || null,
+    }
+  })
+
+  // Resumo por grupo (limite compartilhado)
+  const resumoPorGrupo = grupos.map((grupo) => {
+    const cartoesDoGrupo = cartoes.filter((c) => c.grupoId === grupo.id)
+    const resumoCartoes = resumoPorCartao.filter((r) => r.grupoId === grupo.id)
+
+    const faturaAtualTotal = resumoCartoes.reduce((a, c) => a + c.faturaAtual, 0)
+    const parcelasFuturasTotal = resumoCartoes.reduce((a, c) => a + c.parcelasFuturas, 0)
+    const disponivelReal = grupo.limiteCompartilhado - faturaAtualTotal - parcelasFuturasTotal
+    const percConsumo = ((faturaAtualTotal / grupo.limiteCompartilhado) * 100).toFixed(1)
+
+    return {
+      ...grupo,
+      cartoes: resumoCartoes,
+      faturaAtualTotal: parseFloat(faturaAtualTotal.toFixed(2)),
+      parcelasFuturasTotal: parseFloat(parcelasFuturasTotal.toFixed(2)),
       disponivelReal: parseFloat(disponivelReal.toFixed(2)),
       percConsumo: parseFloat(percConsumo),
     }
@@ -111,16 +183,23 @@ export function useCartao() {
     // estado
     lancamentos,
     cartoes,
+    grupos,
     mesAtual,
-    // ações
+    // ações - lançamentos
     adicionarLancamento,
     removerLancamento,
+    // ações - cartões
     adicionarCartao,
     removerCartao,
     editarCartao,
+    // ações - grupos
+    adicionarGrupo,
+    removerGrupo,
+    editarGrupo,
     // cálculos
     projecaoMensal,
     resumoPorCartao,
+    resumoPorGrupo,
     totalLimite,
     totalFaturaAtual,
     totalParcelasFuturas,
