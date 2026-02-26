@@ -52,12 +52,14 @@ function detectarCategoria(descricao) {
 function parseBBTxt(texto) {
   const linhas = texto.split('\n')
 
-  // Extrai o ano do cabeçalho (ex: "25/02/2026")
-  let ano = new Date().getFullYear().toString()
+  // Extrai mês e ano do cabeçalho da fatura (ex: "25/02/2026")
+  let anoFatura = new Date().getFullYear()
+  let mesFatura = new Date().getMonth() + 1
   for (const linha of linhas) {
-    const matchAno = linha.match(/\d{2}\/\d{2}\/(\d{4})/)
-    if (matchAno) {
-      ano = matchAno[1]
+    const matchData = linha.match(/(\d{2})\/(\d{2})\/(\d{4})/)
+    if (matchData) {
+      mesFatura = parseInt(matchData[2])
+      anoFatura = parseInt(matchData[3])
       break
     }
   }
@@ -74,7 +76,6 @@ function parseBBTxt(texto) {
     const valorStr = match[3].trim()
 
     const valor = parseMoeda(valorStr)
-
     if (valor <= 0) continue
     if (/pgto|pagamento|saldo fatura|doacao|arredt/i.test(descRaw)) continue
 
@@ -83,8 +84,14 @@ function parseBBTxt(texto) {
       .replace(/\s+/g, ' ')
       .trim()
 
-    // Detecta parcelas (ex: "PARC 01/03")
-    // O valor no extrato BB já é o valor da parcela — multiplica pra achar o total
+    // ── Determina o ano correto da transação ──────────────────
+    // Numa fatura de fev/2026: transações em meses > 02 são de 2025 (ano anterior)
+    const [diaStr, mesStr] = dataStr.split('/')
+    const mesTransacao = parseInt(mesStr)
+    const anoTransacao = mesTransacao > mesFatura ? anoFatura - 1 : anoFatura
+    const dataTransacao = `${anoTransacao}-${mesStr.padStart(2, '0')}-${diaStr.padStart(2, '0')}`
+
+    // ── Detecta parcelas (ex: "PARC 04/21") ──────────────────
     const matchParcela = descricao.match(/(\d{2})\/(\d{2})/)
     const parcelaAtual  = matchParcela ? parseInt(matchParcela[1]) : 1
     const totalParcelas = matchParcela ? parseInt(matchParcela[2]) : 1
@@ -92,11 +99,17 @@ function parseBBTxt(texto) {
       ? parseFloat((valor * totalParcelas).toFixed(2))
       : valor
 
-    // ✅ CORREÇÃO: era "data" (undefined), agora chama parseData corretamente
-    const dataFormatada = parseData(dataStr, ano, 'ddmm')
+    // ── Calcula a data REAL de início da compra ───────────────
+    // "PARC 04/21" na data 2025-11-22 → compra iniciou 3 meses antes → 2025-08-22
+    let dataBase = dataTransacao
+    if (parcelaAtual > 1) {
+      const d = new Date(dataTransacao)
+      d.setMonth(d.getMonth() - (parcelaAtual - 1))
+      dataBase = d.toISOString().slice(0, 10)
+    }
 
     lancamentos.push({
-      data: dataFormatada,
+      data: dataBase,
       descricao,
       valor: valorTotal,
       categoria: detectarCategoria(descricao),
