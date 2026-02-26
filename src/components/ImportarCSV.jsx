@@ -25,12 +25,23 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
     if (!file) return
     setErro('')
 
-    const reader = new FileReader()
-    reader.onload = (ev) => {
+    // Tenta ler o arquivo com encoding correto
+    // BB exporta em Windows-1252, Nubank/Inter em UTF-8
+    const tentarLer = (encoding) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (ev) => resolve(ev.target.result)
+        reader.onerror = reject
+        reader.readAsText(file, encoding)
+      })
+
+    const processar = (texto) => {
       try {
-        const texto = ev.target.result
+        // Normaliza quebras de linha (Windows \r\n → \n)
+        const textoNormalizado = texto.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+
         const banco = bancoSelecionado === 'auto' ? null : bancoSelecionado
-        const { banco: bancoDet, lancamentos } = importarCSV(texto, banco)
+        const { banco: bancoDet, lancamentos } = importarCSV(textoNormalizado, banco)
 
         if (!lancamentos.length) {
           setErro('Nenhum lançamento encontrado. Verifique se o arquivo é o extrato correto.')
@@ -39,14 +50,31 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
 
         setBancoDetetado(bancoDet)
         setPreview(lancamentos)
-        setSelecionados(lancamentos.map((_, i) => i)) // seleciona todos por padrão
+        setSelecionados(lancamentos.map((_, i) => i))
         setEtapa('revisao')
       } catch (err) {
-        setErro('Erro ao ler o arquivo. Certifique-se de que é um CSV válido.')
+        setErro('Não foi possível interpretar o arquivo. Tente selecionar o banco manualmente.')
+        console.error(err)
       }
     }
-    reader.readAsText(file, 'UTF-8')
-  }
+
+    // Tenta Windows-1252 primeiro (BB), depois UTF-8 (Nubank/Inter)
+    tentarLer('windows-1252')
+      .then((texto) => {
+        // Se o texto tem caracteres típicos do BB, usa ele
+        if (texto.includes('SISBB') || texto.includes('Banco do Brasil') || texto.includes('Fatura')) {
+          processar(texto)
+        } else {
+          // Senão tenta UTF-8
+          return tentarLer('UTF-8').then(processar)
+        }
+      })
+      .catch(() => {
+        tentarLer('UTF-8').then(processar).catch(() => {
+          setErro('Erro ao ler o arquivo. Tente outro formato.')
+        })
+      })
+}
 
   function toggleSelecionado(idx) {
     setSelecionados((prev) =>
