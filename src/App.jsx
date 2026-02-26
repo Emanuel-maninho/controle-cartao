@@ -48,7 +48,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
-      <div className="max-w-lg mx-auto px-4 pb-32">
+      <div className="max-w-2xl mx-auto px-4 pb-32">
 
         {/* Header */}
         <div className="pt-8 pb-2">
@@ -125,7 +125,7 @@ export default function App() {
 
       {/* Navbar inferior */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-700 z-50">
-        <div className="max-w-lg mx-auto flex justify-around items-center py-2">
+        <div className="max-w-2xl mx-auto flex justify-around items-center py-2">
           {ABAS.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
