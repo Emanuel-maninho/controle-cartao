@@ -27,6 +27,7 @@ export default function App() {
     cartoes,
     grupos,
     mesAtual,
+    carregando,
     adicionarLancamento,
     removerLancamento,
     adicionarCartao,
