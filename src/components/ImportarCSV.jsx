@@ -11,7 +11,7 @@ const BANCOS = [
 ]
 
 export default function ImportarCSV({ cartoes, adicionarLancamento }) {
-  const [etapa, setEtapa] = useState('upload') // upload | revisao | concluido
+  const [etapa, setEtapa] = useState('upload')
   const [bancoSelecionado, setBancoSelecionado] = useState('auto')
   const [cartaoId, setCartaoId] = useState(cartoes[0]?.id || '')
   const [preview, setPreview] = useState([])
@@ -20,61 +20,64 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
   const [erro, setErro] = useState('')
   const inputRef = useRef()
 
-  function handleArquivo(e) {
+  function tentarLer(file, encoding) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = (ev) => resolve(ev.target.result)
+      reader.onerror = reject
+      reader.readAsText(file, encoding)
+    })
+  }
+
+  function processar(texto, banco) {
+    // Normaliza quebras de linha Windows/Mac/Linux
+    const textoNormalizado = texto
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+
+    const forcado = banco === 'auto' ? null : banco
+    const { banco: bancoDet, lancamentos } = importarCSV(textoNormalizado, forcado)
+
+    if (!lancamentos.length) {
+      setErro('Nenhum lançamento encontrado. Verifique se o arquivo é o extrato correto ou selecione o banco manualmente.')
+      return false
+    }
+
+    setBancoDetetado(bancoDet)
+    setPreview(lancamentos)
+    setSelecionados(lancamentos.map((_, i) => i))
+    setEtapa('revisao')
+    return true
+  }
+
+  async function handleArquivo(e) {
     const file = e.target.files[0]
     if (!file) return
     setErro('')
 
-    // Tenta ler o arquivo com encoding correto
-    // BB exporta em Windows-1252, Nubank/Inter em UTF-8
-    const tentarLer = (encoding) =>
-      new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = (ev) => resolve(ev.target.result)
-        reader.onerror = reject
-        reader.readAsText(file, encoding)
-      })
+    // Lista de encodings a tentar em ordem
+    const encodings = ['windows-1252', 'iso-8859-1', 'UTF-8']
 
-    const processar = (texto) => {
+    for (const encoding of encodings) {
       try {
-        // Normaliza quebras de linha (Windows \r\n → \n)
-        const textoNormalizado = texto.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+        const texto = await tentarLer(file, encoding)
 
-        const banco = bancoSelecionado === 'auto' ? null : bancoSelecionado
-        const { banco: bancoDet, lancamentos } = importarCSV(textoNormalizado, banco)
+        // Valida se o texto tem conteúdo útil (não é lixo binário)
+        const temConteudo = texto.length > 50 && /[a-zA-Z0-9]/.test(texto)
+        if (!temConteudo) continue
 
-        if (!lancamentos.length) {
-          setErro('Nenhum lançamento encontrado. Verifique se o arquivo é o extrato correto.')
-          return
-        }
+        const ok = processar(texto, bancoSelecionado)
+        if (ok) return // leu e processou com sucesso
 
-        setBancoDetetado(bancoDet)
-        setPreview(lancamentos)
-        setSelecionados(lancamentos.map((_, i) => i))
-        setEtapa('revisao')
-      } catch (err) {
-        setErro('Não foi possível interpretar o arquivo. Tente selecionar o banco manualmente.')
-        console.error(err)
+        // Se processar retornou false (nenhum lançamento), tenta próximo encoding
+      } catch {
+        continue
       }
     }
 
-    // Tenta Windows-1252 primeiro (BB), depois UTF-8 (Nubank/Inter)
-    tentarLer('windows-1252')
-      .then((texto) => {
-        // Se o texto tem caracteres típicos do BB, usa ele
-        if (texto.includes('SISBB') || texto.includes('Banco do Brasil') || texto.includes('Fatura')) {
-          processar(texto)
-        } else {
-          // Senão tenta UTF-8
-          return tentarLer('UTF-8').then(processar)
-        }
-      })
-      .catch(() => {
-        tentarLer('UTF-8').then(processar).catch(() => {
-          setErro('Erro ao ler o arquivo. Tente outro formato.')
-        })
-      })
-}
+    // Se chegou aqui, nenhum encoding funcionou
+    setErro('Não foi possível ler o arquivo. Tente selecionar o banco manualmente no seletor acima.')
+  }
 
   function toggleSelecionado(idx) {
     setSelecionados((prev) =>
@@ -113,7 +116,7 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
     if (inputRef.current) inputRef.current.value = ''
   }
 
-  // ── ETAPA: CONCLUÍDO ──────────────────────────────────────────
+  // ── CONCLUÍDO ────────────────────────────────────────────────
   if (etapa === 'concluido') {
     return (
       <div className="mt-4 flex flex-col items-center justify-center gap-4 py-12">
@@ -131,7 +134,7 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
     )
   }
 
-  // ── ETAPA: REVISÃO ────────────────────────────────────────────
+  // ── REVISÃO ──────────────────────────────────────────────────
   if (etapa === 'revisao') {
     return (
       <div className="mt-4 space-y-4">
@@ -142,7 +145,6 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
           </button>
         </div>
 
-        {/* Info banco detectado */}
         <div className="bg-slate-800 rounded-xl p-3 border border-slate-700 flex items-center gap-3">
           <FileText className="text-blue-400 shrink-0" size={20} />
           <div>
@@ -153,7 +155,6 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
           </div>
         </div>
 
-        {/* Selecionar cartão */}
         <div>
           <label className="text-xs text-slate-400 mb-1 block">Vincular ao cartão *</label>
           <select
@@ -167,7 +168,6 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
           </select>
         </div>
 
-        {/* Selecionar todos */}
         <div className="flex items-center justify-between">
           <p className="text-sm text-slate-400">{selecionados.length} de {preview.length} selecionados</p>
           <button
@@ -178,7 +178,6 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
           </button>
         </div>
 
-        {/* Lista de lançamentos */}
         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden max-h-[420px] overflow-y-auto">
           {preview.map((lanc, idx) => (
             <div
@@ -188,7 +187,6 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
                 selecionados.includes(idx) ? 'bg-blue-500/10' : 'hover:bg-slate-700/30'
               }`}
             >
-              {/* Checkbox */}
               <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
                 selecionados.includes(idx) ? 'bg-blue-600 border-blue-600' : 'border-slate-600'
               }`}>
@@ -209,14 +207,15 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
                   R$ {lanc.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </p>
                 {lanc.parcelas > 1 && (
-                  <p className="text-xs text-slate-400">{lanc.parcelas}x</p>
+                  <p className="text-xs text-slate-400">
+                    {lanc.parcelas}x de R$ {(lanc.valor / lanc.parcelas).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </p>
                 )}
               </div>
             </div>
           ))}
         </div>
 
-        {/* Botão importar */}
         <button
           onClick={handleImportar}
           disabled={selecionados.length === 0}
@@ -229,12 +228,11 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
     )
   }
 
-  // ── ETAPA: UPLOAD ─────────────────────────────────────────────
+  // ── UPLOAD ───────────────────────────────────────────────────
   return (
     <div className="mt-4 space-y-4">
-      <h2 className="text-lg font-bold text-white">Importar Extrato CSV</h2>
+      <h2 className="text-lg font-bold text-white">Importar Extrato</h2>
 
-      {/* Seletor de banco */}
       <div>
         <label className="text-xs text-slate-400 mb-1 block">Banco</label>
         <select
@@ -248,14 +246,13 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
         </select>
       </div>
 
-      {/* Área de upload */}
       <div
         onClick={() => inputRef.current?.click()}
         className="border-2 border-dashed border-slate-600 hover:border-blue-500 rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer transition-colors group"
       >
         <Upload size={36} className="text-slate-500 group-hover:text-blue-400 transition-colors" />
-        <p className="text-slate-300 font-medium">Clique para selecionar o arquivo CSV</p>
-        <p className="text-slate-500 text-xs">Nubank, Inter e Banco do Brasil suportados</p>
+        <p className="text-slate-300 font-medium">Clique para selecionar o arquivo</p>
+        <p className="text-slate-500 text-xs">CSV, TXT e OFX suportados · Nubank, Inter e BB</p>
         <input
           ref={inputRef}
           type="file"
@@ -265,7 +262,6 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
         />
       </div>
 
-      {/* Erro */}
       {erro && (
         <div className="bg-red-900/30 border border-red-700 rounded-xl p-3 flex items-center gap-2 text-sm text-red-300">
           <AlertTriangle size={16} className="shrink-0" />
@@ -273,13 +269,12 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
         </div>
       )}
 
-      {/* Instruções por banco */}
       <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 space-y-3">
-        <p className="text-xs text-slate-400 uppercase tracking-wider">Como exportar o CSV</p>
+        <p className="text-xs text-slate-400 uppercase tracking-wider">Como exportar o extrato</p>
         <div className="space-y-2 text-sm text-slate-300">
-          <p>🟣 <span className="font-medium text-white">Nubank:</span> App → Meu perfil → Extrato → Exportar fatura</p>
-          <p>🟠 <span className="font-medium text-white">Inter:</span> App → Cartão de crédito → Fatura → Exportar</p>
-          <p>🟡 <span className="font-medium text-white">BB:</span> App/Internet Banking → Extrato → Exportar → CSV</p>
+          <p>🟣 <span className="font-medium text-white">Nubank:</span> App → Meu perfil → Extrato → Exportar fatura (.csv)</p>
+          <p>🟠 <span className="font-medium text-white">Inter:</span> App → Cartão de crédito → Fatura → Exportar (.csv)</p>
+          <p>🟡 <span className="font-medium text-white">BB:</span> Internet Banking → Extrato → Exportar → Texto (.txt)</p>
         </div>
       </div>
     </div>
