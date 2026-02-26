@@ -3,10 +3,11 @@ import { Upload, FileText, CheckCircle, AlertTriangle, X, RefreshCw } from 'luci
 import { importarCSV } from '../utils/importCSV'
 
 const BANCOS = [
-  { id: 'auto', label: 'Detectar automaticamente' },
-  { id: 'nubank', label: 'Nubank' },
-  { id: 'inter', label: 'Inter' },
-  { id: 'bb', label: 'Banco do Brasil' },
+  { id: 'auto',   label: 'Detectar automaticamente' },
+  { id: 'nubank', label: 'Nubank (CSV)'             },
+  { id: 'inter',  label: 'Inter (CSV)'              },
+  { id: 'bb-txt', label: 'Banco do Brasil (TXT)'    },
+  { id: 'ofx',    label: 'Qualquer banco (OFX)'     },
 ]
 
 export default function ImportarCSV({ cartoes, adicionarLancamento }) {
@@ -230,7 +231,7 @@ export default function ImportarCSV({ cartoes, adicionarLancamento }) {
         <input
           ref={inputRef}
           type="file"
-          accept=".csv"
+          accept=".csv,.txt,.ofx"
           onChange={handleArquivo}
           className="hidden"
         />
