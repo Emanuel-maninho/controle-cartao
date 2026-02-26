@@ -46,6 +46,18 @@ export default function App() {
     percImpulsivo,
   } = useCartao()
 
+  // Logo após o useCartao, antes do return:
+  if (carregando) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-slate-400 text-sm">Sincronizando dados...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       <div className="max-w-2xl mx-auto px-4 pb-32">
